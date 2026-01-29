@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Backend API Test</title>
+</head>
+
+<body>
+    <h1>Backend API Test</h1>
+    <button onclick="testRegister()">Test Registration API</button>
+    <button onclick="testLogin()">Test Login API</button>
+    <pre id="result"></pre>
+
+    <script>
+        const API_URL = 'http://localhost:8081/api';
+
+        async function testRegister() {
+            const output = document.getElementById('result');
+            output.textContent = 'Testing registration...';
+
+            try {
+                const response = await fetch(`${API_URL}/auth/register`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        email: 'webtest@test.com',
+                        password: 'test123',
+                        name: 'Web Test User',
+                        phoneNumber: '9876543210',
+                        role: 'STUDENT',
+                        branch: 'CS',
+                        cgpa: 8.5,
+                        skills: 'Java'
+                    })
+                });
+
+                const data = await response.json();
+                output.textContent = `Registration Response (${response.status}):\n` + JSON.stringify(data, null, 2);
+            } catch (error) {
+                output.textContent = 'ERROR: ' + error.message;
+            }
+        }
+
+        async function testLogin() {
+            const output = document.getElementById('result');
+            output.textContent = 'Testing login...';
+
+            try {
+                const response = await fetch(`${API_URL}/auth/authenticate`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        email: 'webtest@test.com',
+                        password: 'test123'
+                    })
+                });
+
+                const data = await response.json();
+                output.textContent = `Login Response (${response.status}):\n` + JSON.stringify(data, null, 2);
+            } catch (error) {
+                output.textContent = 'ERROR: ' + error.message;
+            }
+        }
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TPO Dashboard - ElevateConnect</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-50">
+    <nav class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-4 shadow-lg">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-bold">ElevateConnect TPO</h1>
+            <div class="flex items-center gap-4">
+                <span id="userName" class="font-medium"></span>
+                <button onclick="logout()" class="bg-white/20 px-4 py-2 rounded-lg hover:bg-white/30">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto p-6">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-3xl font-bold text-gray-800">Drive Management</h2>
+            <button onclick="showDriveForm()"
+                class="bg-blue-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-blue-700">
+                + Post New Drive
+            </button>
+        </div>
+
+        <!-- Drive Form -->
+        <div id="driveFormModal" class="hidden mb-6">
+            <div class="bg-white p-6 rounded-xl shadow-lg border-2 border-blue-200">
+                <h3 class="text-xl font-bold mb-4">Create Placement Drive</h3>
+                <form id="driveForm" class="grid md:grid-cols-2 gap-4">
+                    <input id="companyName" placeholder="Company Name" required class="border p-3 rounded-lg">
+                    <input id="minCgpa" type="number" step="0.1" placeholder="Min CGPA" required
+                        class="border p-3 rounded-lg">
+                    <input id="ctc" type="number" step="0.1" placeholder="CTC (LPA)" class="border p-3 rounded-lg">
+                    <input id="deadline" type="date" required class="border p-3 rounded-lg">
+                    <textarea id="jobDescription" placeholder="Job Description"
+                        class="border p-3 rounded-lg md:col-span-2" rows="3"></textarea>
+                    <button type="submit"
+                        class="bg-green-600 text-white font-bold py-3 rounded-lg md:col-span-2 hover:bg-green-700">Launch
+                        Drive</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Drive List with Applications -->
+        <div class="grid lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-1">
+                <h3 class="font-bold text-lg mb-3">Active Drives</h3>
+                <div id="drivesList" class="space-y-3"></div>
+            </div>
+
+            <div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border">
+                <h3 class="font-bold text-lg mb-4" id="applicationsTitle">Select a drive to view applications</h3>
+                <div id="applicationsList"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rejection Modal -->
+    <div id="rejectModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-xl max-w-md w-full mx-4">
+            <h3 class="text-lg font-bold mb-3">Reject & Provide Growth Plan</h3>
+            <textarea id="feedbackContent" class="w-full border p-3 rounded-lg mb-3" rows="3"
+                placeholder="Feedback / Areas to improve..."></textarea>
+            <input id="courseLink" class="w-full border p-3 rounded-lg mb-4"
+                placeholder="Recommended Course Link (Udemy/Coursera)">
+            <div class="flex justify-end gap-2">
+                <button onclick="closeRejectModal()" class="px-4 py-2 text-gray-600">Cancel</button>
+                <button onclick="submitRejection()"
+                    class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Confirm Rejection</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8081/api';
+        const token = localStorage.getItem('token');
+        let currentDriveId = null;
+        let rejectingAppId = null;
+        let rejectingStudentId = null;
+
+        if (!token) window.location.href = 'login.html';
+        document.getElementById('userName').textContent = localStorage.getItem('name') || 'TPO';
+
+        async function fetchAPI(endpoint, options = {}) {
+            const response = await fetch(API_URL + endpoint, {
+                ...options,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    ...options.headers
+                }
+            });
+            if (!response.ok && response.status === 401) logout();
+            return response;
+        }
+
+        async function loadDrives() {
+            const res = await fetchAPI('/tpo/drives');
+            const drives = await res.json();
+
+            document.getElementById('drivesList').innerHTML = drives.map(drive => `
+                <div onclick="selectDrive(${drive.id})" 
+                    class="p-4 border rounded-lg cursor-pointer hover:bg-blue-50 transition ${currentDriveId === drive.id ? 'bg-blue-100 border-blue-500' : 'bg-white'}">
+                    <h4 class="font-bold">${drive.companyName}</h4>
+                    <p class="text-xs text-gray-500">${drive.status}</p>
+                </div>
+            `).join('');
+        }
+
+        async function selectDrive(driveId) {
+            currentDriveId = driveId;
+            loadDrives();
+            const res = await fetchAPI(`/tpo/drives/${driveId}/applications`);
+            const apps = await res.json();
+
+            document.getElementById('applicationsTitle').textContent = `Applications (${apps.length})`;
+            document.getElementById('applicationsList').innerHTML = `
+                <table class="w-full">
+                    <thead><tr class="border-b text-left"><th class="pb-2">Student</th><th class="pb-2">Email</th><th class="pb-2">Status</th><th class="pb-2">Actions</th></tr></thead>
+                    <tbody>${apps.map(app => `
+                        <tr class="border-b hover:bg-gray-50">
+                            <td class="py-3">${app.student.name}</td>
+                            <td class="py-3 text-sm text-gray-600">${app.student.email}</td>
+                            <td class="py-3"><span class="px-2 py-1 rounded-full text-xs font-bold bg-yellow-100 text-yellow-800">${app.status}</span></td>
+                            <td class="py-3 flex gap-2">
+                                <button onclick="updateStatus(${app.id}, 'SELECTED')" class="bg-green-100 text-green-700 px-3 py-1 rounded text-xs hover:bg-green-200">Select</button>
+                                <button onclick="initiateReject(${app.id}, ${app.student.id})" class="bg-red-100 text-red-700 px-3 py-1 rounded text-xs hover:bg-red-200">Reject</button>
+                            </td>
+                        </tr>
+                    `).join('')}</tbody>
+                </table>
+            `;
+        }
+
+        async function updateStatus(appId, status) {
+            await fetchAPI(`/tpo/applications/${appId}/status?status=${status}`, { method: 'PUT' });
+            selectDrive(currentDriveId);
+            alert(`✅ Application ${status.toLowerCase()}!`);
+        }
+
+        function initiateReject(appId, studentId) {
+            rejectingAppId = appId;
+            rejectingStudentId = studentId;
+            document.getElementById('rejectModal').classList.remove('hidden');
+        }
+
+        async function submitRejection() {
+            const content = document.getElementById('feedbackContent').value;
+            const courseLink = document.getElementById('courseLink').value;
+
+            // 1. Reject application
+            await fetchAPI(`/tpo/applications/${rejectingAppId}/status?status=REJECTED`, { method: 'PUT' });
+
+            // 2. Send feedback (Growth Loop)
+            await fetchAPI('/tpo/feedback', {
+                method: 'POST',
+                body: JSON.stringify({ student: { id: rejectingStudentId }, content, courseLink })
+            });
+
+            closeRejectModal();
+            selectDrive(currentDriveId);
+            alert('✅ Rejection recorded with growth plan!');
+        }
+
+        function closeRejectModal() {
+            document.getElementById('rejectModal').classList.add('hidden');
+            document.getElementById('feedbackContent').value = '';
+            document.getElementById('courseLink').value = '';
+        }
+
+        function showDriveForm() {
+            document.getElementById('driveFormModal').classList.toggle('hidden');
+        }
+
+        document.getElementById('driveForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const data = {
+                companyName: document.getElementById('companyName').value,
+                minCgpa: document.getElementById('minCgpa').value,
+                ctc: document.getElementById('ctc').value,
+                deadline: document.getElementById('deadline').value,
+                jobDescription: document.getElementById('jobDescription').value
+            };
+
+            await fetchAPI('/tpo/drives', { method: 'POST', body: JSON.stringify(data) });
+            showDriveForm();
+            loadDrives();
+            alert('✅ Drive posted successfully!');
+            e.target.reset();
+        });
+
+        function logout() {
+            localStorage.clear();
+            window.location.href = 'login.html';
+        }
+
+        loadDrives();
+    </script>
+</body>
+
+</html>

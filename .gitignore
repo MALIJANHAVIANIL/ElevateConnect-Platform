@@ -1,0 +1,23 @@
+# Build and dependencies
+backend/target/
+backend/.mvn/
+backend/mvnw
+backend/mvnw.cmd
+frontend/node_modules/
+frontend/dist/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.swp

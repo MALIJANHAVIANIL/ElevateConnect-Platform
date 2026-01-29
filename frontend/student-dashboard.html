@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Dashboard - ElevateConnect</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-50">
+    <nav class="bg-gradient-to-r from-purple-600 to-blue-600 text-white p-4 shadow-lg">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-bold">ElevateConnect</h1>
+            <div class="flex items-center gap-4">
+                <span id="userName" class="font-medium"></span>
+                <button onclick="logout()"
+                    class="bg-white/20 px-4 py-2 rounded-lg hover:bg-white/30 transition">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto p-6">
+        <!-- Eligible Drives -->
+        <section class="mb-10">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <span class="text-3xl">💼</span> Eligible Placement Drives
+            </h2>
+            <div id="drivesGrid" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+        </section>
+
+        <!-- My Applications -->
+        <section class="mb-10">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <span class="text-3xl">📋</span> My Applications
+            </h2>
+            <div id="applicationsList" class="space-y-3"></div>
+        </section>
+
+        <!-- Growth Loop: Improvement Zone -->
+        <section>
+            <h2 class="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <span class="text-3xl">🎯</span> Improvement Zone
+            </h2>
+            <div id="feedbackList" class="space-y-4"></div>
+        </section>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8081/api';
+        const token = localStorage.getItem('token');
+
+        if (!token) {
+            window.location.href = 'login.html';
+        }
+
+        document.getElementById('userName').textContent = localStorage.getItem('name') || 'Student';
+
+        async function fetchAPI(endpoint, options = {}) {
+            const response = await fetch(API_URL + endpoint, {
+                ...options,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    ...options.headers
+                }
+            });
+            if (!response.ok && response.status === 401) {
+                logout();
+            }
+            return response;
+        }
+
+        async function loadDrives() {
+            const res = await fetchAPI('/student/eligible-drives');
+            const drives = await res.json();
+
+            const grid = document.getElementById('drivesGrid');
+            grid.innerHTML = drives.map(drive => `
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-lg transition">
+                    <h3 class="text-xl font-bold text-gray-900 mb-2">${drive.companyName}</h3>
+                    <p class="text-gray-600 text-sm mb-3">${drive.jobDescription || 'No description'}</p>
+                    <div class="flex justify-between items-center mb-4">
+                        <span class="text-sm text-gray-500">Min CGPA: <strong>${drive.minCgpa || 'N/A'}</strong></span>
+                        <span class="text-sm text-gray-500">CTC: <strong>${drive.ctc || 'N/A'}</strong></span>
+                    </div>
+                    <button onclick="applyToDrive(${drive.id})" 
+                        class="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold py-2 rounded-lg hover:opacity-90 transition">
+                        Apply Now
+                    </button>
+                </div>
+            `).join('') || '<p class="text-gray-500">No eligible drives available</p>';
+        }
+
+        async function loadApplications() {
+            const res = await fetchAPI('/student/my-applications');
+            const apps = await res.json();
+
+            const list = document.getElementById('applicationsList');
+            list.innerHTML = apps.map(app => {
+                const statusColor = app.status === 'SELECTED' ? 'bg-green-100 text-green-700' :
+                    app.status === 'REJECTED' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700';
+                return `
+                    <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex justify-between items-center">
+                        <div>
+                            <h4 class="font-bold text-gray-800">${app.drive.companyName}</h4>
+                            <p class="text-xs text-gray-500">Applied: ${new Date(app.appliedAt).toLocaleDateString()}</p>
+                        </div>
+                        <span class="px-4 py-1 rounded-full text-xs font-bold ${statusColor}">${app.status}</span>
+                    </div>
+                `;
+            }).join('') || '<p class="text-gray-500">No applications yet</p>';
+        }
+
+        async function loadFeedback() {
+            const res = await fetchAPI('/student/my-feedback');
+            const feedback = await res.json();
+
+            const list = document.getElementById('feedbackList');
+            list.innerHTML = feedback.map(fb => `
+                <div class="bg-red-50 border border-red-200 p-5 rounded-lg">
+                    <h4 class="font-bold text-red-800 mb-2">📢 Feedback from TPO</h4>
+                    <p class="text-gray-700 mb-3">${fb.content}</p>
+                    ${fb.courseLink ? `<a href="${fb.courseLink}" target="_blank" class="text-blue-600 underline text-sm block mb-3">🎓 Recommended Course</a>` : ''}
+                    <button onclick="showUploadModal()" class="bg-white border border-gray-300 px-4 py-2 rounded-lg text-sm hover:bg-gray-50">
+                        Upload Certificate Proof
+                    </button>
+                </div>
+            `).join('') || '<p class="text-gray-500 italic">🎉 No pending improvements! Keep up the good work.</p>';
+        }
+
+        async function applyToDrive(driveId) {
+            try {
+                const res = await fetchAPI(`/student/apply/${driveId}`, { method: 'POST' });
+                if (res.ok) {
+                    alert('✅ Application submitted successfully!');
+                    loadApplications();
+                    loadDrives();
+                } else {
+                    const error = await res.text();
+                    alert('❌ ' + error);
+                }
+            } catch (err) {
+                alert('Error applying to drive');
+            }
+        }
+
+        function showUploadModal() {
+            const url = prompt('Enter certificate proof URL (image/PDF link):');
+            if (url) uploadCertificate(url);
+        }
+
+        async function uploadCertificate(url) {
+            const res = await fetchAPI('/student/upload-certificate', {
+                method: 'POST',
+                body: JSON.stringify({ proofUrl: url })
+            });
+
+            if (res.ok) {
+                alert('✅ Certificate uploaded for verification!');
+                loadFeedback();
+            } else {
+                alert('Failed to upload certificate');
+            }
+        }
+
+        function logout() {
+            localStorage.clear();
+            window.location.href = 'login.html';
+        }
+
+        // Load all data
+        loadDrives();
+        loadApplications();
+        loadFeedback();
+    </script>
+</body>
+
+</html>
